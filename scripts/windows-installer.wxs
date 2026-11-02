@@ -9,12 +9,20 @@
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
         <Directory Id="INSTALLFOLDER" Name="BibiLLMProxy">
-          <Component Id="ProgramFiles" Guid="*">
+          <Component Id="GuiProgram" Guid="*">
             <File Id="GuiExe" Source="$(var.SourceRoot)\target\release\lite-gui.exe" KeyPath="yes" />
-            <File Id="CliExe" Source="$(var.SourceRoot)\target\release\lite.exe" />
-            <File Id="License" Source="$(var.SourceRoot)\LICENSE" />
-            <File Id="Readme" Source="$(var.SourceRoot)\README.md" />
-            <File Id="ConfigExample" Source="$(var.SourceRoot)\config.yaml.example" />
+          </Component>
+          <Component Id="CliProgram" Guid="*">
+            <File Id="CliExe" Source="$(var.SourceRoot)\target\release\lite.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="LicenseFile" Guid="*">
+            <File Id="License" Source="$(var.SourceRoot)\LICENSE" KeyPath="yes" />
+          </Component>
+          <Component Id="ReadmeFile" Guid="*">
+            <File Id="Readme" Source="$(var.SourceRoot)\README.md" KeyPath="yes" />
+          </Component>
+          <Component Id="ConfigExampleFile" Guid="*">
+            <File Id="ConfigExample" Source="$(var.SourceRoot)\config.yaml.example" KeyPath="yes" />
           </Component>
         </Directory>
       </Directory>
@@ -29,7 +37,11 @@
       </Directory>
     </Directory>
     <Feature Id="MainFeature" Title="BibiLLMProxy" Level="1">
-      <ComponentRef Id="ProgramFiles" />
+      <ComponentRef Id="GuiProgram" />
+      <ComponentRef Id="CliProgram" />
+      <ComponentRef Id="LicenseFile" />
+      <ComponentRef Id="ReadmeFile" />
+      <ComponentRef Id="ConfigExampleFile" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
   </Product>
