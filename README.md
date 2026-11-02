@@ -1,4 +1,6 @@
 # litellm-rust
+
+Desktop egui proxy console: see [docs/desktop-gui.md](docs/desktop-gui.md).
 a simple and blazing fast LiteLLM-compatible ai gateway for coding agents (Claude Code, Codex, Hermes, etc.) 
 
 This was a proof of concept repo, the official [LiteLLM is now moving to rust](https://github.com/BerriAI/litellm/issues/31263) 

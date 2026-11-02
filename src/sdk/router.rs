@@ -16,11 +16,15 @@ pub struct Deployment {
 
 impl Deployment {
     pub fn messages_url(&self) -> String {
-        format!("{}/v1/messages", self.api_base.trim_end_matches('/'))
+        format!("{}/v1/messages", self.api_root())
     }
 
     pub fn responses_url(&self) -> String {
-        format!("{}/v1/responses", self.api_base.trim_end_matches('/'))
+        format!("{}/v1/responses", self.api_root())
+    }
+
+    fn api_root(&self) -> &str {
+        self.api_base.trim_end_matches('/').trim_end_matches("/v1")
     }
 }
 
@@ -137,9 +141,28 @@ impl std::fmt::Debug for Router {
 mod tests {
     use std::collections::HashMap;
 
+    use super::Deployment;
     use super::Router;
     use crate::proxy::config::{GatewayConfig, LiteLlmParams, ModelEntry};
     use crate::sdk::providers::{self, transform::ProviderRegistry};
+
+    #[test]
+    fn accepts_upstream_api_base_with_v1_suffix() {
+        let deployment = Deployment {
+            provider_id: "openai".into(),
+            upstream_model: "gpt".into(),
+            api_base: "https://proxy.example.com/v1/".into(),
+            api_key: "key".into(),
+        };
+        assert_eq!(
+            deployment.responses_url(),
+            "https://proxy.example.com/v1/responses"
+        );
+        assert_eq!(
+            deployment.messages_url(),
+            "https://proxy.example.com/v1/messages"
+        );
+    }
 
     #[test]
     fn resolves_model_to_upstream() {

@@ -20,17 +20,20 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
 
+      - name: Install desktop build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev
+
       - name: Check formatting
         run: cargo fmt --all --check
 
       - name: Check Rust compile
-        run: cargo check --all-targets --locked
+        run: cargo check --all-targets --locked --features gui
 
       - name: Lint with Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: cargo clippy --all-targets --locked --features gui -- -D warnings
 
       - name: Run tests
-        run: cargo test --locked
+        run: cargo test --locked --features gui
 
       - name: Enforce code size limits
         run: python3 scripts/check_code_size.py

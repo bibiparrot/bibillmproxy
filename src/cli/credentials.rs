@@ -123,6 +123,7 @@ fn restrict_file_permissions(_path: &Path) -> Result<(), Box<dyn std::error::Err
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::fs;
 
     use tempfile::NamedTempFile;

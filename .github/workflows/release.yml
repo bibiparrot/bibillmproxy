@@ -1,0 +1,110 @@
+name: Build desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked --features gui --bin lite-gui --bin lite
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}".TrimStart('v')
+          $folder = "dist/bibillmproxy-$version-windows-x64-portable"
+          New-Item -ItemType Directory -Force "$folder/docs" | Out-Null
+          Copy-Item target/release/lite-gui.exe,target/release/lite.exe,LICENSE,README.md,config.yaml.example $folder
+          Copy-Item docs/desktop-gui.md "$folder/docs"
+          Compress-Archive -Path $folder -DestinationPath "$folder.zip"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Package installer
+        shell: pwsh
+        run: |
+          $env:APP_VERSION = "${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}".TrimStart('v')
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts/windows-installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install desktop build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev
+      - name: Build
+        run: cargo build --release --locked --features gui --bin lite-gui --bin lite
+      - name: Package portable tarball and DEB
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}"
+          version="${version#v}"
+          mkdir -p dist
+          portable="bibillmproxy-${version}-linux-x64-portable"
+          mkdir -p "dist/$portable/docs"
+          cp target/release/lite-gui target/release/lite LICENSE README.md config.yaml.example "dist/$portable/"
+          cp docs/desktop-gui.md "dist/$portable/docs/"
+          tar -czf "dist/$portable.tar.gz" -C dist "$portable"
+          package="dist/deb-root"
+          mkdir -p "$package/DEBIAN" "$package/usr/bin" "$package/usr/share/applications" "$package/usr/share/doc/bibillmproxy"
+          install -m 755 target/release/lite-gui target/release/lite "$package/usr/bin/"
+          install -m 644 LICENSE README.md docs/desktop-gui.md config.yaml.example "$package/usr/share/doc/bibillmproxy/"
+          cat > "$package/DEBIAN/control" <<EOF
+          Package: bibillmproxy
+          Version: $version
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: bibiparrot <bibiparrot@users.noreply.github.com>
+          Homepage: https://github.com/bibiparrot/bibillmproxy
+          Depends: libegl1, libgl1, libx11-6, libxkbcommon0
+          Description: LiteLLM-compatible desktop proxy console
+          EOF
+          cat > "$package/usr/share/applications/bibillmproxy.desktop" <<EOF
+          [Desktop Entry]
+          Name=BibiLLMProxy
+          Exec=lite-gui
+          Type=Application
+          Categories=Network;Development;
+          Terminal=false
+          EOF
+          dpkg-deb --build --root-owner-group "$package" "dist/bibillmproxy-${version}-linux-amd64.deb"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" packages/* --repo "${GITHUB_REPOSITORY}" --generate-notes --title "BibiLLMProxy ${GITHUB_REF_NAME}"

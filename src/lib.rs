@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod db;
 pub mod errors;
+pub mod gateway_server;
 pub mod http;
 pub mod mcp;
 pub mod model_prices;

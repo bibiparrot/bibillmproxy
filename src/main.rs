@@ -1,22 +1,7 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf};
 
-use axum::Router as AxumRouter;
 use clap::{Args as ClapArgs, Parser, Subcommand};
-use litellm_rust::{
-    db::managed_agents::pool as managed_agents_pool,
-    http::routes::router,
-    model_prices,
-    proxy::{
-        config::{load_config, GatewayConfig},
-        state::AppState,
-    },
-    sdk::{
-        providers::{self, transform::ProviderRegistry},
-        router::Router,
-    },
-};
-use tokio::net::TcpListener;
-use tower_http::trace::TraceLayer;
+use litellm_rust::gateway_server;
 use tracing_subscriber::EnvFilter;
 
 mod cli;
@@ -79,30 +64,11 @@ async fn serve_gateway(args: ServeArgs) -> Result<(), Box<dyn std::error::Error>
 
     init_tracing();
 
-    let config = load_config(&args.config)?;
-    let mut providers = ProviderRegistry::new();
-    providers::register_all(&mut providers);
-
-    let model_router = Router::from_config(&config, &providers)?;
-    let http = AppState::build_http_client()?;
-    let model_cost_map = model_prices::load(&http).await;
-    let db = build_managed_agents_pool(&config).await?;
-    let state = Arc::new(AppState::new(
-        config.clone(),
-        model_router,
-        http,
-        model_cost_map,
-        db,
-    )?);
-
     let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse()?;
-    let app: AxumRouter = router(state).layer(TraceLayer::new_for_http());
-    let listener = TcpListener::bind(addr).await?;
-
-    print_startup_banner(&config, addr);
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    gateway_server::serve(&args.config, addr, shutdown_signal(), |bound| {
+        println!("LiteLLM proxy listening on http://{bound}");
+    })
+    .await?;
 
     println!("\nINFO:     Shutting down LiteLLM Proxy Server");
     Ok(())
@@ -115,41 +81,6 @@ fn init_tracing() {
         )
         .with_target(false)
         .init();
-}
-
-async fn build_managed_agents_pool(
-    config: &GatewayConfig,
-) -> Result<Option<sqlx::PgPool>, Box<dyn std::error::Error>> {
-    let Some(database_url) = config.general_settings.database_url.as_deref() else {
-        return Ok(None);
-    };
-    let pool = managed_agents_pool::connect(database_url).await?;
-    managed_agents_pool::migrate(&pool).await?;
-    Ok(Some(pool))
-}
-
-fn print_startup_banner(config: &GatewayConfig, addr: SocketAddr) {
-    println!("\nLiteLLM: Proxy initialized with Config, Set models:");
-    for entry in &config.model_list {
-        println!("  {}", entry.model_name);
-    }
-    // Aggregation behind a bare `/mcp` is not yet supported. Warn loudly so a
-    // multi-server config does not silently behave as single-server.
-    if config.mcp_servers.len() > 1 {
-        tracing::warn!(
-            "{} MCP servers configured; aggregation behind bare /mcp is not supported — \
-             clients must target /mcp/{{name}} or send x-litellm-mcp-server / ?server=",
-            config.mcp_servers.len()
-        );
-    }
-    if config.general_settings.master_key.is_some() {
-        println!("LiteLLM: Set Master Key");
-    }
-    println!("INFO:     Application startup complete.");
-    println!(
-        "INFO:     Uvicorn running on http://{} (Press CTRL+C to quit)",
-        addr
-    );
 }
 
 async fn shutdown_signal() {

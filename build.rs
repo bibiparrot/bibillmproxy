@@ -22,7 +22,9 @@ fn main() {
         .collect();
     names.sort();
 
-    let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let manifest = std::env::var("CARGO_MANIFEST_DIR")
+        .unwrap()
+        .replace('\\', "/");
     let mods: String = names
         .iter()
         .map(|n| format!("#[path = \"{manifest}/src/sdk/providers/{n}/mod.rs\"]\npub mod {n};\n"))

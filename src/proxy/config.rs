@@ -52,11 +52,15 @@ pub struct LiteLlmParams {
 
 pub fn load_config(path: &Path) -> Result<GatewayConfig, GatewayError> {
     let raw = fs::read_to_string(path)?;
-    let mut config: GatewayConfig = serde_yaml::from_str(&raw).map_err(|error| {
+    parse_config(&raw)
+}
+
+pub fn parse_config(raw: &str) -> Result<GatewayConfig, GatewayError> {
+    let mut config: GatewayConfig = serde_yaml::from_str(raw).map_err(|error| {
         // `mcp_servers` changed from a list to a dict keyed by server name.
         // serde reports this as an "invalid type: sequence" error; translate it
         // into actionable guidance for anyone upgrading an old config.
-        if is_mcp_sequence_error(&raw, &error) {
+        if is_mcp_sequence_error(raw, &error) {
             GatewayError::InvalidConfig(
                 "mcp_servers is now a dict keyed by server name (was a list). \
                  See docs/mcp.md for the new format."
