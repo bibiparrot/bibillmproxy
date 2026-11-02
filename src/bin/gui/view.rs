@@ -1,17 +1,17 @@
 impl ProxyApp {
     fn routes_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label("将 OpenAI Responses 或 Anthropic Messages 兼容代理接入本地端点。API Base 可填写代理根地址或以 /v1 结尾的地址。");
+        ui.label(t!("intro").to_string());
         self.add_route_buttons(ui);
         ui.separator();
         let mut changed = self.route_cards(ui);
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("本地访问密钥");
+            ui.label(t!("local_key").to_string());
             changed |= ui
                 .add(egui::TextEdit::singleline(&mut self.master_key).password(true))
                 .changed();
         });
-        ui.small("Key 可填写 os.environ/变量名；启动前需在环境变量或 .env 中提供。YAML 文件会保存明文输入，请自行保护文件权限。");
+        ui.small(t!("key_hint").to_string());
         if changed {
             self.sync_forms();
         }
@@ -19,7 +19,7 @@ impl ProxyApp {
 
     fn add_route_buttons(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("＋ OpenAI 代理").clicked() {
+            if ui.button(t!("add_openai").to_string()).clicked() {
                 self.routes.push(RouteDraft {
                     alias: "my-openai".into(),
                     model: "openai/model-name".into(),
@@ -28,7 +28,7 @@ impl ProxyApp {
                 });
                 self.sync_forms();
             }
-            if ui.button("＋ Claude 代理").clicked() {
+            if ui.button(t!("add_claude").to_string()).clicked() {
                 self.routes.push(RouteDraft {
                     alias: "my-claude".into(),
                     model: "anthropic/model-name".into(),
@@ -46,24 +46,24 @@ impl ProxyApp {
         for (index, route) in self.routes.iter_mut().enumerate() {
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.strong(format!("路由 {}", index + 1));
-                    if ui.button("删除").clicked() {
+                    ui.strong(t!("route_n", n = index + 1).to_string());
+                    if ui.button(t!("delete").to_string()).clicked() {
                         remove = Some(index);
                     }
                 });
                 egui::Grid::new(("route", index))
                     .num_columns(2)
                     .show(ui, |ui| {
-                        ui.label("本地模型名");
+                        ui.label(t!("local_model").to_string());
                         changed |= ui.text_edit_singleline(&mut route.alias).changed();
                         ui.end_row();
-                        ui.label("上游模型");
+                        ui.label(t!("upstream_model").to_string());
                         changed |= ui.text_edit_singleline(&mut route.model).changed();
                         ui.end_row();
-                        ui.label("API Base");
+                        ui.label(t!("api_base").to_string());
                         changed |= ui.text_edit_singleline(&mut route.api_base).changed();
                         ui.end_row();
-                        ui.label("上游 API Key");
+                        ui.label(t!("upstream_key").to_string());
                         changed |= ui
                             .add(egui::TextEdit::singleline(&mut route.api_key).password(true))
                             .changed();
@@ -80,52 +80,71 @@ impl ProxyApp {
     }
 
     fn settings_ui(&mut self, ui: &mut egui::Ui) {
-        ui.heading("LiteLLM Rust · 代理控制台");
+        ui.heading(t!("title").to_string());
+        self.language_ui(ui);
         ui.horizontal(|ui| {
-            ui.label("配置文件");
+            ui.label(t!("config_file").to_string());
             ui.add_sized(
                 [350.0, 22.0],
                 egui::TextEdit::singleline(&mut self.config_path),
             );
-            if ui.button("读取").clicked() {
+            if ui.button(t!("load").to_string()).clicked() {
                 self.reload();
             }
         });
         ui.horizontal(|ui| {
-            ui.label("本地端口");
+            ui.label(t!("local_port").to_string());
             ui.add_sized([85.0, 22.0], egui::TextEdit::singleline(&mut self.port));
-            ui.label("监听 127.0.0.1");
-            if ui.button("保存 YAML").clicked() {
+            ui.label(t!("listen_local").to_string());
+            if ui.button(t!("save_yaml").to_string()).clicked() {
                 if let Err(error) = self.save_config() {
-                    self.message = format!("保存失败: {error}");
+                    self.message = t!("save_failed", error = error).to_string();
                 }
             }
-            if self.status == ServerStatus::Stopped && ui.button("启动代理").clicked() {
+            if self.status == ServerStatus::Stopped && ui.button(t!("start_proxy").to_string()).clicked() {
                 self.start();
             }
             if matches!(self.status, ServerStatus::Running(_) | ServerStatus::Starting)
-                && ui.button("停止代理").clicked()
+                && ui.button(t!("stop_proxy").to_string()).clicked()
             {
                 self.stop();
             }
         });
         ui.label(&self.message);
         if self.dirty {
-            ui.small("有未保存的配置；运行中的代理需重启才会使用新配置。");
+            ui.small(t!("unsaved").to_string());
         }
+    }
+
+    fn language_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(t!("language").to_string());
+            let current = LANGUAGE_CHOICES.iter()
+                .find(|(id, _)| *id == self.locale.requested)
+                .map(|(_, label)| *label).unwrap_or("System / 系统");
+            let mut changed = false;
+            egui::ComboBox::from_id_salt("language")
+                .selected_text(current)
+                .show_ui(ui, |ui| {
+                    for (id, label) in LANGUAGE_CHOICES {
+                        changed |= ui.selectable_value(&mut self.locale.requested, (*id).into(), *label).changed();
+                    }
+                });
+            if changed { self.locale.apply(); self.persist_settings(); }
+        });
     }
 
     fn endpoints_ui(&self, ui: &mut egui::Ui) {
         if let ServerStatus::Running(addr) = self.status {
             ui.horizontal(|ui| {
                 ui.monospace(format!("Responses: http://{addr}/v1/responses"));
-                if ui.button("复制").clicked() {
+                if ui.button(t!("copy").to_string()).clicked() {
                     ui.ctx().copy_text(format!("http://{addr}/v1/responses"));
                 }
             });
             ui.horizontal(|ui| {
                 ui.monospace(format!("Claude Code: http://{addr}/v1/messages"));
-                if ui.button("复制").clicked() {
+                if ui.button(t!("copy").to_string()).clicked() {
                     ui.ctx().copy_text(format!("http://{addr}"));
                 }
             });
@@ -134,10 +153,10 @@ impl ProxyApp {
 
     fn yaml_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui.button("载入表单").clicked() {
+            if ui.button(t!("load_forms").to_string()).clicked() {
                 self.parse_forms();
             }
-            ui.small("可编辑完整 LiteLLM YAML；编辑后点“载入表单”刷新路由视图。");
+            ui.small(t!("yaml_hint").to_string());
         });
         if ui
             .add(
@@ -161,8 +180,8 @@ impl eframe::App for ProxyApp {
             self.endpoints_ui(ui);
             ui.separator();
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tab, Tab::Routes, "代理路由");
-                ui.selectable_value(&mut self.tab, Tab::Yaml, "完整 YAML");
+                ui.selectable_value(&mut self.tab, Tab::Routes, t!("routes").to_string());
+                ui.selectable_value(&mut self.tab, Tab::Yaml, t!("full_yaml").to_string());
             });
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
@@ -175,9 +194,8 @@ impl eframe::App for ProxyApp {
         }
     }
 
-    fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        storage.set_string("config_path", self.config_path.clone());
-        storage.set_string("port", self.port.clone());
+    fn save(&mut self, _storage: &mut dyn eframe::Storage) {
+        self.persist_settings();
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

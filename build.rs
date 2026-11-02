@@ -4,6 +4,13 @@
 use std::{fs, path::Path};
 
 fn main() {
+    #[cfg(windows)]
+    {
+        winresource::WindowsResource::new()
+            .set_icon("assets/bibillmproxy.ico")
+            .compile()
+            .expect("failed to embed Windows icon");
+    }
     let providers_dir = Path::new("src/sdk/providers");
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let dest = Path::new(&out_dir).join("providers_generated.rs");

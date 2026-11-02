@@ -6,11 +6,12 @@ AppName=BibiLLMProxy
 AppVersion={#AppVersion}
 AppPublisher=bibiparrot
 SourceDir=..
+SetupIconFile=assets\bibillmproxy.ico
 DefaultDirName={localappdata}\Programs\BibiLLMProxy
 DefaultGroupName=BibiLLMProxy
 PrivilegesRequired=lowest
 OutputDir=dist
-OutputBaseFilename=bibillmproxy-{#AppVersion}-windows-x64-setup
+OutputBaseFilename=bibillmproxy-{#AppVersion}-windows-x86_64_setup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\lite-gui.exe
@@ -22,6 +23,7 @@ Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.yaml.example"; DestDir: "{app}"; Flags: ignoreversion
 Source: "docs\desktop-gui.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "assets\bibillmproxy-icon.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\BibiLLMProxy"; Filename: "{app}\lite-gui.exe"; WorkingDir: "{app}"

@@ -17,6 +17,7 @@ use litellm_rust::{
     },
 };
 use serde_yaml::{Mapping, Value};
+use rust_i18n::t;
 use tokio::sync::oneshot;
 
 const DEFAULT_YAML: &str = "model_list: []\n\n# Add an upstream proxy in the Routes tab.\n";

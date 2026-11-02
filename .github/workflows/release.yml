@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -20,90 +20,115 @@ jobs:
       - name: Package portable ZIP
         shell: pwsh
         run: |
-          $version = "${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}".TrimStart('v')
-          $folder = "dist/bibillmproxy-$version-windows-x64-portable"
-          New-Item -ItemType Directory -Force "$folder/docs" | Out-Null
+          $version = "${{ github.ref_type == 'tag' && github.ref_name || '0.2.0' }}".TrimStart('v')
+          $folder = "dist/bibillmproxy-$version-windows-x86_64_portable"
+          New-Item -ItemType Directory -Force "$folder/docs", "$folder/assets" | Out-Null
           Copy-Item target/release/lite-gui.exe,target/release/lite.exe,LICENSE,README.md,config.yaml.example $folder
           Copy-Item docs/desktop-gui.md "$folder/docs"
+          Copy-Item assets/bibillmproxy-icon.png,assets/bibillmproxy.ico "$folder/assets"
           Compress-Archive -Path $folder -DestinationPath "$folder.zip"
-      - name: Install Inno Setup
+      - name: Install installer tools
         shell: pwsh
-        run: choco install innosetup --no-progress -y
-      - name: Package installer
+        run: choco install innosetup wixtoolset --no-progress -y
+      - name: Package setup EXE
         shell: pwsh
         run: |
-          $env:APP_VERSION = "${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}".TrimStart('v')
+          $env:APP_VERSION = "${{ github.ref_type == 'tag' && github.ref_name || '0.2.0' }}".TrimStart('v')
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts/windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
+      - name: Package MSI
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_type == 'tag' && github.ref_name || '0.2.0' }}".TrimStart('v')
+          $wix = Get-ChildItem 'C:\Program Files (x86)' -Directory -Filter 'WiX Toolset v3*' | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $wix) { throw 'WiX Toolset v3 not found' }
+          $bin = Join-Path $wix.FullName 'bin'
+          & (Join-Path $bin 'candle.exe') -nologo -arch x64 "-dAppVersion=$version" "-dSourceRoot=$((Get-Location).Path)" -out dist/installer.wixobj scripts/windows-installer.wxs
+          if ($LASTEXITCODE -ne 0) { throw "WiX candle failed: $LASTEXITCODE" }
+          & (Join-Path $bin 'light.exe') -nologo -out "dist/bibillmproxy-$version-windows-x86_64_setup.msi" dist/installer.wixobj
+          if ($LASTEXITCODE -ne 0) { throw "WiX light failed: $LASTEXITCODE" }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-packages
           path: |
             dist/*.zip
-            dist/*-setup.exe
+            dist/*_setup.exe
+            dist/*_setup.msi
           if-no-files-found: error
 
   linux:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install desktop build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev
+      - name: Install packaging and desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev rpm squashfs-tools
       - name: Build
         run: cargo build --release --locked --features gui --bin lite-gui --bin lite
-      - name: Package portable tarball and DEB
+      - name: Package AppImage, RPM and tarball
         shell: bash
         run: |
-          set -euo pipefail
-          version="${{ github.ref_type == 'tag' && github.ref_name || format('0.1.0+snapshot.{0}', github.run_number) }}"
-          version="${version#v}"
-          mkdir -p dist
-          portable="bibillmproxy-${version}-linux-x64-portable"
-          mkdir -p "dist/$portable/docs"
-          cp target/release/lite-gui target/release/lite LICENSE README.md config.yaml.example "dist/$portable/"
-          cp docs/desktop-gui.md "dist/$portable/docs/"
-          tar -czf "dist/$portable.tar.gz" -C dist "$portable"
-          package="dist/deb-root"
-          mkdir -p "$package/DEBIAN" "$package/usr/bin" "$package/usr/share/applications" "$package/usr/share/doc/bibillmproxy"
-          install -m 755 target/release/lite-gui target/release/lite "$package/usr/bin/"
-          install -m 644 LICENSE README.md docs/desktop-gui.md config.yaml.example "$package/usr/share/doc/bibillmproxy/"
-          cat > "$package/DEBIAN/control" <<EOF
-          Package: bibillmproxy
-          Version: $version
-          Section: net
-          Priority: optional
-          Architecture: amd64
-          Maintainer: bibiparrot <bibiparrot@users.noreply.github.com>
-          Homepage: https://github.com/bibiparrot/bibillmproxy
-          Depends: libegl1, libgl1, libx11-6, libxkbcommon0
-          Description: LiteLLM-compatible desktop proxy console
-          EOF
-          cat > "$package/usr/share/applications/bibillmproxy.desktop" <<EOF
-          [Desktop Entry]
-          Name=BibiLLMProxy
-          Exec=lite-gui
-          Type=Application
-          Categories=Network;Development;
-          Terminal=false
-          EOF
-          dpkg-deb --build --root-owner-group "$package" "dist/bibillmproxy-${version}-linux-amd64.deb"
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_REF_TYPE}" != tag ]]; then version="0.2.0"; fi
+          bash scripts/package-linux.sh "$version" "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-packages
+          name: linux-${{ matrix.arch }}-packages
           path: |
-            dist/*.tar.gz
-            dist/*.deb
+            dist/bibillmproxy-*.AppImage
+            dist/bibillmproxy-*.rpm
+            dist/bibillmproxy-*.tar.gz
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x86_64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --release --locked --features gui --bin lite-gui --bin lite
+      - name: Package app, DMG and PKG
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_REF_TYPE}" != tag ]]; then version="0.2.0"; fi
+          bash scripts/package-macos.sh "$version" "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-packages
+          path: |
+            dist/*.dmg
+            dist/*.pkg
+            dist/*.zip
           if-no-files-found: error
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, linux]
+    needs: [windows, linux, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: packages
           merge-multiple: true
+      - name: Verify release files
+        run: test "$(find packages -maxdepth 1 -type f | wc -l)" -eq 15
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

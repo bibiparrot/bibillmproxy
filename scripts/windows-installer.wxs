@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="BibiLLMProxy" Language="1033" Version="$(var.AppVersion)" Manufacturer="bibiparrot" UpgradeCode="A8E2D787-A51D-44CA-895C-77684088955D">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BibiLLMProxy is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="$(var.SourceRoot)\assets\bibillmproxy.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="BibiLLMProxy">
+          <Component Id="ProgramFiles" Guid="*">
+            <File Id="GuiExe" Source="$(var.SourceRoot)\target\release\lite-gui.exe" KeyPath="yes" />
+            <File Id="CliExe" Source="$(var.SourceRoot)\target\release\lite.exe" />
+            <File Id="License" Source="$(var.SourceRoot)\LICENSE" />
+            <File Id="Readme" Source="$(var.SourceRoot)\README.md" />
+            <File Id="ConfigExample" Source="$(var.SourceRoot)\config.yaml.example" />
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="BibiLLMProxy">
+          <Component Id="StartMenuShortcut" Guid="*">
+            <Shortcut Id="LaunchShortcut" Name="BibiLLMProxy" Target="[INSTALLFOLDER]lite-gui.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+            <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\bibiparrot\BibiLLMProxy" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+    <Feature Id="MainFeature" Title="BibiLLMProxy" Level="1">
+      <ComponentRef Id="ProgramFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Product>
+</Wix>
