@@ -26,7 +26,7 @@
           </Component>
         </Directory>
       </Directory>
-      <Directory Id="ProgramMenuFolder">
+      <Directory Id="CommonProgramsFolder">
         <Directory Id="ApplicationProgramsFolder" Name="BibiLLMProxy">
           <Component Id="StartMenuShortcut" Guid="*">
             <Shortcut Id="LaunchShortcut" Name="BibiLLMProxy" Target="[INSTALLFOLDER]lite-gui.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
